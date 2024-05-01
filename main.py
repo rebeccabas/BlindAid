@@ -7,8 +7,19 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 import logging
 from gtts import gTTS
+import cv2
+from paddleocr import PaddleOCR
+import numpy as np
 
 from logging.handlers import RotatingFileHandler
+import wave
+import io
+import librosa
+import soundfile as sf
+import speech_recognition as sr
+import shutil
+from pydub import AudioSegment
+
 
 # Remove any existing log handlers
 logger = logging.getLogger(__name__)
@@ -36,6 +47,41 @@ logging.basicConfig(level=logging.DEBUG)
 load_dotenv()
 
 app = FastAPI()
+
+ocr = PaddleOCR(use_angle_cls=True, lang='en')
+def perform_ocr(image_bytes: bytes) -> str:
+    try:
+        # Read the image using OpenCV
+        image = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
+
+        # Perform OCR on the image
+        ocr_result = ocr.ocr(image, cls=True)
+
+        # Extract text from OCR results
+        extracted_text = ""
+        for line in ocr_result:
+            for char_info in line:
+                extracted_text += char_info[1][0]
+
+        return extracted_text
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="An error occurred during OCR")
+
+# Endpoint to perform OCR on a single image
+@app.post("/ocr/")
+async def ocr_single_image(file: UploadFile = File(...)):
+    try:
+        # Read the uploaded image
+        image_bytes = await file.read()
+
+        # Perform OCR on the image
+        extracted_text = perform_ocr(image_bytes)
+        print(extracted_text)
+
+        return {"extracted_text": extracted_text}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="An error occurred during image processing")
+
 
 # CORS configuration
 # ... (CORS configuration code remains the same)
@@ -67,6 +113,66 @@ def call_generative_model(image_data):
     except Exception as e:
         logger.error(f"Error calling generative model: {e}", exc_info=True)
         raise
+
+
+def call_generative_model_voice(text):
+    try:
+        # Load the GenerativeModel instance with the desired model - Gemini Pro Vision
+        model = genai.GenerativeModel('gemini-pro-vision')
+
+        # Define the prompt for model generation
+        prompt = text + "This is a text extracted from an audio. A blind person is asking for sth. talk to him/her. address them by you"
+
+        # Generate content using the model, prompt, and image data
+        response = model.generate_content(
+            [prompt]
+        )
+
+        # Process and return the generated content
+        generated_text = response.text
+        return generated_text
+    except Exception as e:
+        logger.error(f"Error calling generative model: {e}", exc_info=True)
+        raise
+
+
+@app.post("/voice_assist/")
+async def voice(file:UploadFile = File(...)):
+    try:
+        # Define the directory to save the audio files
+        save_dir = "audio_files"
+        os.makedirs(save_dir, exist_ok=True)
+
+        # Save the uploaded audio file to a file in the specified directory
+        file_path = os.path.join(save_dir, file.filename)
+        with open(file_path, "wb") as audio_file:
+            audio_file.write(await file.read())
+
+        # Convert the audio file to WAV format using MoviePy
+        wav_file_path = os.path.join(save_dir, "audio.wav")
+        audio_clip = AudioFileClip(file_path)
+        audio_clip.write_audiofile(wav_file_path)
+
+        # Transcribe the audio into text using Google's speech recognition
+        recognizer = sr.Recognizer()
+        
+        try:
+
+            with sr.AudioFile(wav_file_path) as source:
+                audio = recognizer.record(source)
+            transcribed_text = recognizer.recognize_google(audio)
+
+        except:
+            transcribed_text= "Nothing"
+
+        print(transcribed_text)
+        text = call_generative_model_voice(transcribed_text)
+
+
+        return {"gemini": text}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
+
 
 @app.post("/navigate/")
 async def navigate(file: UploadFile = File(...)):
@@ -127,6 +233,52 @@ async def navigate_tts(file: UploadFile = File(...)):
         logger.error(f"Unexpected error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="An unexpected error occurred")
 
+import os
+from fastapi import FastAPI, File, UploadFile, HTTPException
+from pydantic import BaseModel
+import speech_recognition as sr
+from moviepy.editor import AudioFileClip
+
+
+
+@app.post("/audio/transcribe/")
+async def transcribe_audio(file: UploadFile = File(...)):
+    try:
+        # Define the directory to save the audio files
+        save_dir = "audio_files"
+        os.makedirs(save_dir, exist_ok=True)
+
+        # Save the uploaded audio file to a file in the specified directory
+        file_path = os.path.join(save_dir, file.filename)
+        with open(file_path, "wb") as audio_file:
+            audio_file.write(await file.read())
+
+        # Convert the audio file to WAV format using MoviePy
+        wav_file_path = os.path.join(save_dir, "audio.wav")
+        audio_clip = AudioFileClip(file_path)
+        audio_clip.write_audiofile(wav_file_path)
+
+        # Transcribe the audio into text using Google's speech recognition
+        recognizer = sr.Recognizer()
+        
+        try:
+
+            with sr.AudioFile(wav_file_path) as source:
+                audio = recognizer.record(source)
+            transcribed_text = recognizer.recognize_google(audio)
+
+        except:
+            transcribed_text= "Nothing"
+
+        
+            
+        print(transcribed_text)
+
+        return {"transcribed_text": transcribed_text}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
+
+    
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
