@@ -10,7 +10,7 @@ from gtts import gTTS
 import cv2
 from paddleocr import PaddleOCR
 import numpy as np
-
+from fastapi.responses import StreamingResponse
 from logging.handlers import RotatingFileHandler
 import wave
 import io
@@ -19,6 +19,9 @@ import soundfile as sf
 import speech_recognition as sr
 import shutil
 from pydub import AudioSegment
+from fastapi.responses import FileResponse
+from googletrans import Translator
+
 
 
 # Remove any existing log handlers
@@ -184,7 +187,9 @@ async def navigate(file: UploadFile = File(...)):
         # Call the generative model with the image bytes
         response = call_generative_model(image_bytes)
         logger.info("Generated instructions successfully.")
-        return {"instructions": response}
+        translator = Translator()
+        translated_text = translator.translate(response, dest='ne')
+        return {"instructions": translated_text.text}
     except ValueError as e:
         logger.error(f"Value error: {e}", exc_info=True)
         raise HTTPException(status_code=400, detail=str(e))
@@ -200,29 +205,22 @@ async def navigate_tts(file: UploadFile = File(...)):
     try:
         # Read the uploaded image
         image_bytes = await file.read()
-        logger.debug("Received image for TTS processing.")
+        image = Image.open(io.BytesIO(image_bytes))
 
         # Call the generative model with the image bytes
-        instructions = call_generative_model(image_bytes)
-        logger.info("Generated instructions for TTS.")
+        response = call_generative_model(image_bytes)
+        logger.info("Generated instructions successfully.")
+        translator = Translator()
+        translated_text = translator.translate(response, dest='ne')
 
-        # Generate TTS audio file
-        tts = gTTS(text=instructions, lang='en')
-        audio_bytes_io = io.BytesIO()
-        tts.write_to_fp(audio_bytes_io)
 
-        # Convert the audio file to bytes
-        audio_bytes = audio_bytes_io.getvalue()
+        language = 'ne'
+        myobj = gTTS(text=translated_text.text, lang=language, slow=False)
+        myobj.save("instructions.wav")
+        audio_file = "instructions.wav"
 
-        # Return the audio file as a response with download link
-        logger.debug("Returning audio file.")
-        return Response(
-            audio_bytes,
-            media_type="audio/mpeg",
-            headers={
-                "Content-Disposition": "attachment; filename=output_audio.mp3"
-            }
-        )
+        return FileResponse(audio_file, media_type="audio/wav")
+        
     except ValueError as e:
         logger.error(f"Value error: {e}", exc_info=True)
         raise HTTPException(status_code=400, detail=str(e))
@@ -232,6 +230,27 @@ async def navigate_tts(file: UploadFile = File(...)):
     except Exception as e:
         logger.error(f"Unexpected error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="An unexpected error occurred")
+
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+
+
+
+@app.get("/get_audio/")
+async def get_audio_file():
+    try:
+        # Construct the path to the WAV audio file
+        audio_file_path = "instructions.wav"
+
+        # Return the audio file as a response
+        return FileResponse(audio_file_path, media_type="audio/wav")
+    except Exception as e:
+        return {"error": str(e)}
+
+
+
+
+
 
 import os
 from fastapi import FastAPI, File, UploadFile, HTTPException
