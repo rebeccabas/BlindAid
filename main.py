@@ -51,7 +51,7 @@ genai.configure(api_key=api_key)
 def call_generative_model(image_data):
     try:
         # Load the GenerativeModel instance with the desired model - Gemini Pro Vision
-        model = genai.GenerativeModel('gemini-pro-vision')
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         # Define the prompt for model generation
         prompt = "Give direct instructions for a blind person whose camera is sending you these images about the objects and their location and which direction he should move next. The image is taken from first person perspective of the blind. Give instructions by addressing the blind using 'You'. Keep it short."
