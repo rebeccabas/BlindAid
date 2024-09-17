@@ -96,10 +96,10 @@ async def ocr_single_image(file: UploadFile = File(...)):
 def call_generative_model(image_data):
     try:
         # Load the GenerativeModel instance with the desired model - Gemini Pro Vision
-        model = genai.GenerativeModel('gemini-pro-vision')
+        model = genai.GenerativeModel('gemini-1.5-pro')
 
         # Define the prompt for model generation
-        prompt = "Give direct instructions for a blind person whose camera is sending you these images about the objects and their location and which direction he should move next. The image is taken from first person perspective of the blind. Give instructions by addressing the blind using 'You'. Keep it short."
+        prompt = "Give direct instructions for a blind person whose camera is sending you these images about the objects and their location. The image is taken from first person perspective of the blind. Give instructions by addressing the blind using 'You'. Keep it very short, possibly a single line with 4 or 5 words. The instructions should be in nepali. "
 
         # Generate content using the model, prompt, and image data
         response = model.generate_content(
@@ -174,4 +174,4 @@ async def navigate_tts(file: UploadFile = File(...)):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
