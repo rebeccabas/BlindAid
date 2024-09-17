@@ -96,7 +96,9 @@ async def ocr_single_image(file: UploadFile = File(...)):
 def call_generative_model(image_data):
     try:
         # Load the GenerativeModel instance with the desired model - Gemini Pro Vision
-        model = genai.GenerativeModel('gemini-1.5-pro')
+
+        model = genai.GenerativeModel('gemini-1.5-flash')
+
 
         # Define the prompt for model generation
         prompt = "Give direct instructions for a blind person whose camera is sending you these images about the objects and their location. The image is taken from first person perspective of the blind. Give instructions by addressing the blind using 'You'. Keep it very short, possibly a single line with 4 or 5 words. The instructions should be in nepali. "
